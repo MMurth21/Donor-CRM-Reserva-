@@ -1,0 +1,24 @@
+# Secrets
+.env
+backend/.env
+
+# Token cache
+tokens/
+backend/tokens/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/build/
+frontend/.env
+
+# OS
+.DS_Store
