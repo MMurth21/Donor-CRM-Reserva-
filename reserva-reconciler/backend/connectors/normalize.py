@@ -1,6 +1,7 @@
 import json
 import logging
 from pathlib import Path
+from connectors.classy import get_campaign_name
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +64,7 @@ def normalize_transactions(raw_list: list) -> list:
             "donor_name":       tx.get("member_name") or "",
             "donor_email":      tx.get("member_email_address") or "",
             "campaign_id":      campaign_id,
-            # campaign_name is not included in the transaction response;
-            # a separate /campaigns/{id} lookup would be needed
-            "campaign_name":    None,
+            "campaign_name":    get_campaign_name(campaign_id),
             "platform":         "GoFundMe Pro",
             "gross_amount":     gross,
             "total_fees":       total_fees,

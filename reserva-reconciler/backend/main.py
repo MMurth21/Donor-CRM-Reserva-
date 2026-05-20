@@ -6,8 +6,8 @@ load_dotenv()
 
 from auth.quickbooks_oauth import router as qb_router
 from auth.classy_oauth import router as classy_router
-from connectors.classy import fetch_transactions
-from connectors.normalize import normalize_transactions
+from connectors.classy import fetch_transactions, fetch_all_campaigns
+from connectors.normalize import normalize_transactions, _load_mapping
 
 app = FastAPI(title="Reserva Reconciler")
 
@@ -48,3 +48,15 @@ def transactions_normalized(page: int = 1):
     }
 
     return {"summary": summary, "transactions": rows}
+
+
+@app.get("/classy/campaigns/unmapped")
+def campaigns_unmapped():
+    campaigns = fetch_all_campaigns()
+    mapping = _load_mapping()
+    unmapped = [
+        {"id": cid, "name": name}
+        for cid, name in sorted(campaigns.items())
+        if cid not in mapping
+    ]
+    return {"unmapped_count": len(unmapped), "campaigns": unmapped}
