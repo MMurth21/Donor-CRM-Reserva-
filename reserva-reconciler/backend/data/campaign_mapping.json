@@ -2,7 +2,7 @@
   "_meta": {
     "source": "CLASSY DONATIONS KEY",
     "generated_for": "Reserva YLT",
-    "campaign_count": 20,
+    "campaign_count": 21,
     "needs_review": [
       "470798",
       "542875"
@@ -188,6 +188,15 @@
       "designation_id": "1834794",
       "internal_campaign_name": "Conservation Projects, Colombia",
       "qbo_class": "Conservation:Colombia",
+      "donor_selects": false
+    },
+    "782016": {
+      "campaign_id": "782016",
+      "campaign_name": "Run for the Rainforest 2026",
+      "qbo_account": "Run for the Rainforest",
+      "designation_id": "177017",
+      "internal_campaign_name": "Conservation",
+      "qbo_class": "Conservation",
       "donor_selects": false
     }
   }
