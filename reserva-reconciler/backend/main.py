@@ -6,7 +6,7 @@ load_dotenv()
 
 from auth.quickbooks_oauth import router as qb_router
 from auth.classy_oauth import router as classy_router
-from connectors.classy import fetch_transactions, fetch_all_campaigns
+from connectors.classy import fetch_transactions, fetch_all_campaigns, fetch_campaign_totals
 from connectors.normalize import normalize_transactions, _load_mapping
 
 app = FastAPI(title="Reserva Reconciler")
@@ -60,3 +60,80 @@ def campaigns_unmapped():
         if cid not in mapping
     ]
     return {"unmapped_count": len(unmapped), "campaigns": unmapped}
+
+
+@app.get("/mapping/unmapped")
+def mapping_unmapped():
+    """Campaigns that move money and have no QBO mapping yet."""
+    campaigns = fetch_all_campaigns()
+    mapping = _load_mapping()
+    totals = fetch_campaign_totals()
+    result = sorted(
+        [
+            {"id": cid, "name": name, "total_gross": totals.get(cid, 0.0)}
+            for cid, name in campaigns.items()
+            if cid not in mapping and totals.get(cid, 0.0) > 0
+        ],
+        key=lambda r: r["total_gross"],
+        reverse=True,
+    )
+    return {"unmapped_count": len(result), "campaigns": result}
+
+
+@app.get("/mapping/all-campaigns")
+def mapping_all_campaigns():
+    """All Classy campaigns with mapping status and gross total."""
+    campaigns = fetch_all_campaigns()
+    mapping = _load_mapping()
+    totals = fetch_campaign_totals()
+    result = sorted(
+        [
+            {
+                "id": cid,
+                "name": name,
+                "total_gross": totals.get(cid, 0.0),
+                "mapping_status": (
+                    "mapped" if cid in mapping else
+                    ("no_transactions" if totals.get(cid, 0.0) == 0 else "needs_mapping")
+                ),
+            }
+            for cid, name in campaigns.items()
+        ],
+        key=lambda r: r["total_gross"],
+        reverse=True,
+    )
+    return {"total_campaigns": len(result), "campaigns": result}
+
+
+@app.get("/debug/mapping-join")
+def debug_mapping_join():
+    import json
+    from pathlib import Path
+
+    # 1. Simulate how campaign_id comes off a raw Classy transaction
+    raw_campaign_id = 719401  # integer, as Classy returns it
+    as_str = str(raw_campaign_id)
+
+    # 2. Load mapping exactly as normalize.py does
+    mapping = _load_mapping()
+    sample_keys = list(mapping.keys())[:3]
+
+    return {
+        "raw_campaign_id": {
+            "value": raw_campaign_id,
+            "type": type(raw_campaign_id).__name__,
+            "repr": repr(raw_campaign_id),
+        },
+        "after_str_cast": {
+            "value": as_str,
+            "type": type(as_str).__name__,
+            "repr": repr(as_str),
+        },
+        "mapping_sample_keys": [
+            {"key": k, "type": type(k).__name__, "repr": repr(k)}
+            for k in sample_keys
+        ],
+        "total_keys_loaded": len(mapping),
+        "str_strip_found_in_mapping": as_str.strip() in mapping,
+        "mapping_file_path": str(Path(__file__).parent / "data" / "campaign_mapping.json"),
+    }
