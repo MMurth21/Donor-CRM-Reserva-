@@ -6,6 +6,7 @@ load_dotenv()
 
 from auth.quickbooks_oauth import router as qb_router
 from auth.classy_oauth import router as classy_router
+from connectors.classy import fetch_transactions
 
 app = FastAPI(title="Reserva Reconciler")
 
@@ -24,3 +25,8 @@ app.include_router(classy_router, prefix="/auth/classy", tags=["classy-auth"])
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/classy/transactions/sample")
+def transactions_sample():
+    return fetch_transactions(per_page=3)
