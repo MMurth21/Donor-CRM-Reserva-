@@ -1,8 +1,194 @@
 {
-  "782016": {
-    "qbo_account": "",
-    "qbo_class": "",
-    "designation_id": "1834794",
-    "donor_selects": false
+  "_meta": {
+    "source": "CLASSY DONATIONS KEY",
+    "generated_for": "Reserva YLT",
+    "campaign_count": 20,
+    "needs_review": [
+      "470798",
+      "542875"
+    ],
+    "fee_math": "platform_fee = total_fees - payment_processor_fee"
+  },
+  "campaigns": {
+    "384511": {
+      "campaign_id": "384511",
+      "campaign_name": "Reserva",
+      "qbo_account": "Non Campaign Contributions:Individual Donors",
+      "designation_id": "177011",
+      "internal_campaign_name": "Unrestricted Revenue",
+      "qbo_class": "Unrestricted Revenue",
+      "donor_selects": false
+    },
+    "392257": {
+      "campaign_id": "392257",
+      "campaign_name": "Emergency Expansion of Dracula Youth Reserve: Save 1050 Acres of Primary Forest from Mining",
+      "qbo_account": "Youth Council Fundraising Campaigns:Classy Fundraising Pages",
+      "designation_id": "178272",
+      "internal_campaign_name": "DYR Expansion 2022",
+      "qbo_class": "Conservation: Dracula Reserve",
+      "donor_selects": false
+    },
+    "433142": {
+      "campaign_id": "433142",
+      "campaign_name": "Run for the Rainforest",
+      "qbo_account": "Run for the Rainforest",
+      "designation_id": "177017",
+      "internal_campaign_name": "Conservation",
+      "qbo_class": "Conservation",
+      "donor_selects": false
+    },
+    "450844": {
+      "campaign_id": "450844",
+      "campaign_name": "Giving Tuesday",
+      "qbo_account": "Youth Council Fundraising Campaigns:Classy Fundraising Pages",
+      "designation_id": "177019",
+      "internal_campaign_name": "Storytelling",
+      "qbo_class": "Storytelling",
+      "donor_selects": false
+    },
+    "456557": {
+      "campaign_id": "456557",
+      "campaign_name": "Year-end Giving with Reserva",
+      "qbo_account": "Youth Council Fundraising Campaigns:Classy Fundraising Pages",
+      "designation_id": "177011",
+      "internal_campaign_name": "Unrestricted Revenue",
+      "qbo_class": "Unrestricted Revenue",
+      "donor_selects": false
+    },
+    "462611": {
+      "campaign_id": "462611",
+      "campaign_name": "Yoga for Conservation",
+      "qbo_account": "Youth Council Fundraising Campaigns:Classy Fundraising Pages",
+      "designation_id": "177011",
+      "internal_campaign_name": "Unrestricted Revenue",
+      "qbo_class": "Unrestricted Revenue",
+      "donor_selects": false
+    },
+    "470798": {
+      "campaign_id": "470798",
+      "campaign_name": "Support Reserva",
+      "qbo_account": "Non Campaign Contributions:Individual Donors",
+      "designation_id": null,
+      "internal_campaign_name": null,
+      "qbo_class": null,
+      "donor_selects": true
+    },
+    "485369": {
+      "campaign_id": "485369",
+      "campaign_name": "Precious & Awesome Auction for Reserva",
+      "qbo_account": "Youth Council Fundraising Campaigns:Classy Fundraising Pages",
+      "designation_id": "178272",
+      "internal_campaign_name": "DYR Expansion 2022",
+      "qbo_class": "Conservation: Dracula Reserve",
+      "donor_selects": false
+    },
+    "482886": {
+      "campaign_id": "482886",
+      "campaign_name": "Palladium Run for the Rainforest",
+      "qbo_account": "Youth Council Fundraising Campaigns:Classy Fundraising Pages",
+      "designation_id": "177011",
+      "internal_campaign_name": "Unrestricted Revenue",
+      "qbo_class": "Unrestricted Revenue",
+      "donor_selects": false
+    },
+    "555341": {
+      "campaign_id": "555341",
+      "campaign_name": "Landslide Relief for Neighbors of Dracula Reserve",
+      "qbo_account": "Youth Council Fundraising Campaigns:Classy Fundraising Pages",
+      "designation_id": "1832562",
+      "internal_campaign_name": "San Marcos Fundraiser",
+      "qbo_class": "Conservation:Community Projects",
+      "donor_selects": false
+    },
+    "533269": {
+      "campaign_id": "533269",
+      "campaign_name": "Tracking Turtles to Protect Panama's Pearl Islands",
+      "qbo_account": "Youth Council Fundraising Campaigns:Classy Fundraising Pages",
+      "designation_id": "1835736",
+      "internal_campaign_name": "Pearl Islands Marine Project",
+      "qbo_class": "Conservation:Pearl Islands",
+      "donor_selects": false
+    },
+    "567913": {
+      "campaign_id": "567913",
+      "campaign_name": "Camille & Pearson's Wedding Conservation Fund",
+      "qbo_account": "Non Campaign Contributions:Individual Donors",
+      "designation_id": "1834794",
+      "internal_campaign_name": "Conservation Projects, Colombia",
+      "qbo_class": "Conservation:Colombia",
+      "donor_selects": false
+    },
+    "581432": {
+      "campaign_id": "581432",
+      "campaign_name": "Run for the Reef",
+      "qbo_account": "Youth Council Fundraising Campaigns:Classy Fundraising Pages",
+      "designation_id": "1835736",
+      "internal_campaign_name": "Pearl Islands Marine Project",
+      "qbo_class": "Conservation:Pearl Islands",
+      "donor_selects": false
+    },
+    "640611": {
+      "campaign_id": "640611",
+      "campaign_name": "Giving Tuesday 2024",
+      "qbo_account": "Non Campaign Contributions:Individual Donors",
+      "designation_id": "177011",
+      "internal_campaign_name": "Unrestricted Revenue",
+      "qbo_class": "Unrestricted Revenue",
+      "donor_selects": false
+    },
+    "649437": {
+      "campaign_id": "649437",
+      "campaign_name": "Poem or Pay",
+      "qbo_account": "Youth Council Fundraising Campaigns:Classy Fundraising Pages",
+      "designation_id": "1835736",
+      "internal_campaign_name": "Pearl Islands Marine Project",
+      "qbo_class": "Conservation:Pearl Islands",
+      "donor_selects": false
+    },
+    "542875": {
+      "campaign_id": "542875",
+      "campaign_name": "Help Reserva Grow on Giving Tuesday!",
+      "qbo_account": "Youth Council Fundraising Campaigns:Classy Fundraising Pages",
+      "designation_id": null,
+      "internal_campaign_name": null,
+      "qbo_class": null,
+      "donor_selects": true
+    },
+    "526178": {
+      "campaign_id": "526178",
+      "campaign_name": "Expedition to Survey Mining Damage & Species in Dracula",
+      "qbo_account": "Youth Council Fundraising Campaigns:Classy Fundraising Pages",
+      "designation_id": "177011",
+      "internal_campaign_name": "Unrestricted Revenue",
+      "qbo_class": "Unrestricted Revenue",
+      "donor_selects": false
+    },
+    "669933": {
+      "campaign_id": "669933",
+      "campaign_name": "35—oh my!",
+      "qbo_account": "Non Campaign Contributions:Individual Donors",
+      "designation_id": "177011",
+      "internal_campaign_name": "Unrestricted Revenue",
+      "qbo_class": "Unrestricted Revenue",
+      "donor_selects": false
+    },
+    "743348": {
+      "campaign_id": "743348",
+      "campaign_name": "BioSoc Pub Quiz",
+      "qbo_account": "Youth Council Fundraising Campaigns:Classy Fundraising Pages",
+      "designation_id": "1834794",
+      "internal_campaign_name": "Conservation Projects, Colombia",
+      "qbo_class": "Conservation:Colombia",
+      "donor_selects": false
+    },
+    "719401": {
+      "campaign_id": "719401",
+      "campaign_name": "Piamonte Conectado",
+      "qbo_account": "Youth Council Fundraising Campaigns:Classy Fundraising Pages",
+      "designation_id": "1834794",
+      "internal_campaign_name": "Conservation Projects, Colombia",
+      "qbo_class": "Conservation:Colombia",
+      "donor_selects": false
+    }
   }
 }

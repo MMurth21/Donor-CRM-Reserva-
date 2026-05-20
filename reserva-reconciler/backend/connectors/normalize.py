@@ -12,8 +12,8 @@ def _load_mapping() -> dict:
     if not MAPPING_FILE.exists():
         return {}
     raw = json.loads(MAPPING_FILE.read_text())
-    # normalise all keys to str so lookups always work
-    return {str(k): v for k, v in raw.items()}
+    campaigns = raw.get("campaigns", raw)  # support both new nested and legacy flat format
+    return {str(k): v for k, v in campaigns.items()}
 
 
 def _f(value, default: float = 0.0) -> float:
