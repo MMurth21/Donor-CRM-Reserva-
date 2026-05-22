@@ -53,10 +53,12 @@ def get_campaign_name(campaign_id: str):
 
 
 def fetch_campaign_totals(force_refresh: bool = False) -> dict:
-    """Returns {str(campaign_id): total_gross}. Full tx scan, cached 1 hour."""
+    """Returns {str(campaign_id): {"total_gross": float, "txn_count": int}}. Cached 1 hour."""
     if not force_refresh and CAMPAIGN_TOTALS_FILE.exists():
         cached = json.loads(CAMPAIGN_TOTALS_FILE.read_text())
-        if datetime.now(timezone.utc) - datetime.fromisoformat(cached["fetched_at"]) < CACHE_TTL:
+        age_ok = datetime.now(timezone.utc) - datetime.fromisoformat(cached["fetched_at"]) < CACHE_TTL
+        sample = next(iter(cached.get("totals", {}).values()), None)
+        if age_ok and isinstance(sample, dict):  # reject old float-value format
             return cached["totals"]
 
     totals = {}
@@ -79,7 +81,10 @@ def fetch_campaign_totals(force_refresh: bool = False) -> dict:
                 gross = float(tx.get("total_gross_amount") or 0)
             except (ValueError, TypeError):
                 gross = 0.0
-            totals[cid] = round(totals.get(cid, 0.0) + gross, 2)
+            if cid not in totals:
+                totals[cid] = {"total_gross": 0.0, "txn_count": 0}
+            totals[cid]["total_gross"] = round(totals[cid]["total_gross"] + gross, 2)
+            totals[cid]["txn_count"] += 1
         if page >= last_page:
             break
         page += 1
@@ -89,6 +94,16 @@ def fetch_campaign_totals(force_refresh: bool = False) -> dict:
         "totals": totals,
     }, indent=2))
     return totals
+
+
+def _gross(totals: dict, cid: str) -> float:
+    v = totals.get(cid, {})
+    return v.get("total_gross", 0.0) if isinstance(v, dict) else float(v)
+
+
+def _txn_count(totals: dict, cid: str) -> int:
+    v = totals.get(cid, {})
+    return v.get("txn_count", 0) if isinstance(v, dict) else 0
 
 
 def fetch_transactions(page: int = 1, per_page: int = 5) -> dict:
