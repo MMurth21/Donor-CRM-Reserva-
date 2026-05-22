@@ -198,6 +198,24 @@
       "internal_campaign_name": "Conservation",
       "qbo_class": "Conservation",
       "donor_selects": false
+    },
+    "761198": {
+      "campaign_id": "761198",
+      "campaign_name": "Friends of Aldabra",
+      "qbo_account": "Youth Council Fundraising Campaigns:Classy Fundraising Pages",
+      "qbo_class": "Adalbra",
+      "designation_id": null,
+      "internal_campaign_name": null,
+      "donor_selects": false
+    },
+    "761199": {
+      "campaign_id": "761199",
+      "campaign_name": "Josh's Birthday Fundraiser",
+      "qbo_account": "Non Campaign Contributions:Individual Donors",
+      "qbo_class": "Unrestricted Revenue",
+      "designation_id": null,
+      "internal_campaign_name": null,
+      "donor_selects": false
     }
   }
 }
