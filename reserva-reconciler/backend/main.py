@@ -1,9 +1,13 @@
+import io
 import os
 import json
+import logging
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -16,8 +20,14 @@ from connectors.classy import (
     fetch_campaign_totals, _gross, _txn_count,
 )
 from connectors.normalize import normalize_transactions, _load_mapping
+from exporters.sales_receipt_csv import generate_sales_receipt_csv
+from exporters.journal_entry_csv import generate_journal_entry_csv
+
+logger = logging.getLogger(__name__)
 
 MAPPING_FILE = Path(__file__).parent / "data" / "campaign_mapping.json"
+TRANSACTIONS_CACHE_FILE = Path(__file__).parent / "tokens" / "transactions_cache.json"
+CACHE_TTL = timedelta(hours=1)
 
 app = FastAPI(title="Reserva Reconciler")
 
@@ -79,6 +89,46 @@ def transactions_normalized(page: int = 1):
         "unmapped_count":       sum(1 for r in rows if r["mapping_status"] == "needs_mapping"),
     }
     return {"summary": summary, "transactions": rows}
+
+
+@app.get("/classy/transactions/all")
+def transactions_all():
+    """Full normalized transaction list with summary. Cached 1 hour. Filters gross > 0."""
+    if TRANSACTIONS_CACHE_FILE.exists():
+        cached = json.loads(TRANSACTIONS_CACHE_FILE.read_text(encoding="utf-8"))
+        age_ok = datetime.now(timezone.utc) - datetime.fromisoformat(cached["fetched_at"]) < CACHE_TTL
+        if age_ok:
+            return cached["payload"]
+
+    all_raw = []
+    page, last_page = 1, None
+    while True:
+        body = fetch_transactions(page=page, per_page=100)
+        if last_page is None:
+            last_page = body.get("last_page", 1)
+        all_raw.extend(body.get("data", []))
+        if page >= last_page:
+            break
+        page += 1
+
+    rows = normalize_transactions(all_raw)
+    rows = [r for r in rows if r["gross_amount"] > 0]
+
+    summary = {
+        "total_rows":           len(rows),
+        "total_gross":          round(sum(r["gross_amount"]     for r in rows), 2),
+        "total_platform_fee":   round(sum(r["platform_fee"]     for r in rows), 2),
+        "total_processing_fee": round(sum(r["processing_fee"]   for r in rows), 2),
+        "total_net":            round(sum(r["net_amount"]        for r in rows), 2),
+        "unmapped_count":       sum(1 for r in rows if r["mapping_status"] == "needs_mapping"),
+    }
+    payload = {"summary": summary, "transactions": rows}
+
+    TRANSACTIONS_CACHE_FILE.write_text(json.dumps({
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "payload": payload,
+    }, ensure_ascii=False), encoding="utf-8")
+    return payload
 
 
 # ── mapping endpoints ─────────────────────────────────────────────────────────
@@ -205,3 +255,124 @@ def debug_mapping_join():
         "str_strip_found_in_mapping": as_str.strip() in mapping,
         "mapping_file_path":      str(MAPPING_FILE),
     }
+
+
+# ── export ─────────────────────────────────────────────────────────────────────
+
+def _cache_schema_valid(cached: dict) -> bool:
+    """Return False when the cached transactions are missing fields added after initial build."""
+    txns = cached.get("payload", {}).get("transactions", [])
+    if not txns:
+        return True
+    sample = txns[0]
+    return "processor" in sample and "designation_id" in sample and "payment_method" in sample
+
+
+def _get_all_transactions() -> list:
+    """Return the full normalized transaction list (uses /classy/transactions/all cache)."""
+    if TRANSACTIONS_CACHE_FILE.exists():
+        cached = json.loads(TRANSACTIONS_CACHE_FILE.read_text(encoding="utf-8"))
+        age_ok = datetime.now(timezone.utc) - datetime.fromisoformat(cached["fetched_at"]) < CACHE_TTL
+        if age_ok and _cache_schema_valid(cached):
+            return cached["payload"]["transactions"]
+        if age_ok and not _cache_schema_valid(cached):
+            logger.info("Cache schema stale (missing processor/designation_id) — forcing refresh")
+
+    # cache miss or stale schema: re-run the full fetch
+    return transactions_all()["transactions"]
+
+
+@app.get("/export/sales-receipts/report")
+def export_sales_receipts_report():
+    """Validation report — call this first to review before downloading the CSV."""
+    txns = _get_all_transactions()
+    _, report = generate_sales_receipt_csv(txns)
+
+    if report["recon_failures"]:
+        for f in report["recon_failures"]:
+            logger.warning("Recon failure: %s", f)
+
+    logger.info(
+        "Sales receipt report: %d written, %d skipped, %d recon failures",
+        report["written"], report["skipped_unmapped"], len(report["recon_failures"]),
+    )
+    return report
+
+
+@app.get("/export/sales-receipts/download")
+def export_sales_receipts_download():
+    """Stream the QBO Sales Receipt CSV file as a download. FILE ONLY — does not post to QuickBooks."""
+    txns = _get_all_transactions()
+    csv_bytes, report = generate_sales_receipt_csv(txns)
+
+    logger.info(
+        "Sales receipt download: %d receipts, %d skipped, %d recon failures",
+        report["written"], report["skipped_unmapped"], len(report["recon_failures"]),
+    )
+
+    filename = f"sales_receipts_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    return StreamingResponse(
+        io.BytesIO(csv_bytes),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/export/journal-entries/report")
+def export_journal_entries_report(month: str):
+    """
+    Validation report for a single monthly JE.
+
+    month: YYYY-MM (e.g. 2026-05) — required.
+
+    Reviews balance, processor splits, class normalization, and unknown entries.
+    Call this first; download only after confirming the report looks correct.
+    """
+    try:
+        txns = _get_all_transactions()
+        _, report = generate_journal_entry_csv(txns, month)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    if not report.get("balanced"):
+        logger.error("JE %s: IMBALANCED  delta=%s", report["journal_no"], report["delta"])
+    if report.get("cent_adjustment") is not None:
+        logger.info("JE %s: cent adjustment %.4f applied", report["journal_no"], report["cent_adjustment"])
+    if report.get("unknown_processors"):
+        logger.warning("JE %s: %d unknown-processor transactions excluded",
+                       report["journal_no"], len(report["unknown_processors"]))
+
+    logger.info(
+        "Journal entry report: %s  txns=%d  balanced=%s  lines=%d",
+        report["journal_no"], report["transactions_count"],
+        report["balanced"], report["line_count"],
+    )
+    return report
+
+
+@app.get("/export/journal-entries/download")
+def export_journal_entries_download(month: str):
+    """
+    Stream a single monthly QBO Journal Entry CSV.
+
+    month: YYYY-MM (e.g. 2026-05) — required.
+
+    FILE ONLY — does not post to QuickBooks. Review /report first.
+    """
+    try:
+        txns = _get_all_transactions()
+        csv_bytes, report = generate_journal_entry_csv(txns, month)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    logger.info(
+        "Journal entry download: %s  txns=%d  balanced=%s",
+        report["journal_no"], report["transactions_count"], report["balanced"],
+    )
+
+    filename = f"journal_entry_{month}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    return StreamingResponse(
+        io.BytesIO(csv_bytes),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

@@ -25,7 +25,7 @@
       "qbo_account": "Youth Council Fundraising Campaigns:Classy Fundraising Pages",
       "designation_id": "178272",
       "internal_campaign_name": "DYR Expansion 2022",
-      "qbo_class": "Conservation: Dracula Reserve",
+      "qbo_class": "Conservation:Dracula Reserve",
       "donor_selects": false
     },
     "433142": {
@@ -79,7 +79,7 @@
       "qbo_account": "Youth Council Fundraising Campaigns:Classy Fundraising Pages",
       "designation_id": "178272",
       "internal_campaign_name": "DYR Expansion 2022",
-      "qbo_class": "Conservation: Dracula Reserve",
+      "qbo_class": "Conservation:Dracula Reserve",
       "donor_selects": false
     },
     "482886": {
@@ -97,7 +97,7 @@
       "qbo_account": "Youth Council Fundraising Campaigns:Classy Fundraising Pages",
       "designation_id": "1832562",
       "internal_campaign_name": "San Marcos Fundraiser",
-      "qbo_class": "Conservation:Community Projects",
+      "qbo_class": "Conservation:DYR Community Projects",
       "donor_selects": false
     },
     "533269": {
@@ -203,7 +203,7 @@
       "campaign_id": "761198",
       "campaign_name": "Friends of Aldabra",
       "qbo_account": "Youth Council Fundraising Campaigns:Classy Fundraising Pages",
-      "qbo_class": "Adalbra",
+      "qbo_class": "Conservation:Friends of Aldabra",
       "designation_id": null,
       "internal_campaign_name": null,
       "donor_selects": false

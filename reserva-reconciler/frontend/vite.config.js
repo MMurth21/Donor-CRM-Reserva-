@@ -11,6 +11,7 @@ export default defineConfig({
       '/auth':    { target: 'https://127.0.0.1:8000', secure: false, changeOrigin: true },
       '/classy':  { target: 'https://127.0.0.1:8000', secure: false, changeOrigin: true },
       '/health':  { target: 'https://127.0.0.1:8000', secure: false, changeOrigin: true },
+      '/export':  { target: 'https://127.0.0.1:8000', secure: false, changeOrigin: true },
     },
   },
 })

@@ -1,11 +1,19 @@
 import json
 import logging
 from pathlib import Path
-from connectors.classy import get_campaign_name
+from connectors.classy import get_campaign_name, fetch_org_designations
 
 logger = logging.getLogger(__name__)
 
 MAPPING_FILE = Path(__file__).parent.parent / "data" / "campaign_mapping.json"
+
+_PROCESSOR_MAP = {
+    "stripe":      "Stripe",
+    "stripe_ach":  "Stripe",
+    "paypal":      "PayPal",
+    "paypal_ec":   "PayPal",
+    "paypal_rest": "PayPal",
+}
 
 
 def _load_mapping() -> dict:
@@ -24,9 +32,15 @@ def _f(value, default: float = 0.0) -> float:
         return default
 
 
+def _extract_processor(tx: dict) -> str:
+    raw = (tx.get("payment_gateway") or "").lower().strip()
+    return _PROCESSOR_MAP.get(raw, raw)
+
+
 def normalize_transactions(raw_list: list) -> list:
-    mapping = _load_mapping()
-    canonical = []
+    mapping     = _load_mapping()
+    designations = fetch_org_designations()
+    canonical   = []
 
     for tx in raw_list:
         campaign_id = str(tx.get("campaign_id", ""))
@@ -50,9 +64,15 @@ def normalize_transactions(raw_list: list) -> list:
             qbo_class      = None
             mapping_status = "needs_mapping"
         elif camp.get("donor_selects"):
-            qbo_account    = camp.get("qbo_account") or None
-            qbo_class      = camp.get("qbo_class") or None
-            mapping_status = "donor_selects"
+            qbo_account  = camp.get("qbo_account") or None
+            desig        = designations.get(str(tx.get("designation_id", "")), {})
+            ext_ref      = (desig.get("external_reference_id") or "").strip()
+            if ext_ref:
+                qbo_class      = ext_ref
+                mapping_status = "mapped"
+            else:
+                qbo_class      = None
+                mapping_status = "needs_mapping"
         else:
             qbo_account    = camp.get("qbo_account") or None
             qbo_class      = camp.get("qbo_class") or None
@@ -65,7 +85,10 @@ def normalize_transactions(raw_list: list) -> list:
             "donor_email":      tx.get("member_email_address") or "",
             "campaign_id":      campaign_id,
             "campaign_name":    get_campaign_name(campaign_id),
+            "designation_id":   str(tx.get("designation_id", "") or ""),
             "platform":         "GoFundMe Pro",
+            "processor":        _extract_processor(tx),
+            "payment_method":   tx.get("payment_method") or "",
             "gross_amount":     gross,
             "total_fees":       total_fees,
             "processing_fee":   processing_fee,

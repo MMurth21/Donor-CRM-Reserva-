@@ -8,13 +8,49 @@ from auth.classy_oauth import get_valid_token
 CLASSY_API_BASE = "https://api.classy.org/2.0"
 
 TOKENS_DIR = Path(__file__).parent.parent / "tokens"
-CAMPAIGN_CACHE_FILE = TOKENS_DIR / "campaign_cache.json"
-CAMPAIGN_TOTALS_FILE = TOKENS_DIR / "campaign_totals_cache.json"
+CAMPAIGN_CACHE_FILE    = TOKENS_DIR / "campaign_cache.json"
+CAMPAIGN_TOTALS_FILE   = TOKENS_DIR / "campaign_totals_cache.json"
+DESIGNATIONS_CACHE_FILE = TOKENS_DIR / "designations_cache.json"
 CACHE_TTL = timedelta(hours=1)
 
 
 def _headers() -> dict:
     return {"Authorization": f"Bearer {get_valid_token()}"}
+
+
+def fetch_org_designations(force_refresh: bool = False) -> dict:
+    """Return {str(designation_id): designation_record} for org 83147. File-cached 1 hour."""
+    if not force_refresh and DESIGNATIONS_CACHE_FILE.exists():
+        cached = json.loads(DESIGNATIONS_CACHE_FILE.read_text())
+        age_ok = datetime.now(timezone.utc) - datetime.fromisoformat(cached["fetched_at"]) < CACHE_TTL
+        if age_ok:
+            return cached["designations"]
+
+    org_id = os.environ["CLASSY_ORG_ID"]
+    designations = {}
+    page, last_page = 1, None
+    while True:
+        resp = httpx.get(
+            f"{CLASSY_API_BASE}/organizations/{org_id}/designations",
+            headers=_headers(),
+            params={"page": page, "per_page": 100},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        if last_page is None:
+            last_page = body.get("last_page", 1)
+        for d in body.get("data", []):
+            designations[str(d["id"])] = d
+        if page >= last_page:
+            break
+        page += 1
+
+    DESIGNATIONS_CACHE_FILE.write_text(json.dumps({
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "designations": designations,
+    }, indent=2))
+    return designations
 
 
 def fetch_all_campaigns(force_refresh: bool = False) -> dict:
