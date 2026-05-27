@@ -332,6 +332,10 @@ The one thing I want to be precise about: the session logs were written *by Clau
 
 ## User Testing Evidence
 
+**Case study files:**
+- [reserva-ad.mp4](case-study/reserva-ad.mp4) — project video
+- [Reserva YLT.pdf](case-study/Reserva%20YLT.pdf) — case study portfolio PDF
+
 User testing for this project was conducted with Callie (Reserva's bookkeeper) across sessions 3 and 4.
 
 **Session 3 — Accounting Rules Interview**  
