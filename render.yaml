@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: reserva-reconciler-backend
+    runtime: python
+    plan: free
+    rootDir: reserva-reconciler/backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: CLASSY_CLIENT_ID
+        sync: false
+      - key: CLASSY_CLIENT_SECRET
+        sync: false
+      - key: CLASSY_ORG_ID
+        value: "83147"
+      - key: CLASSY_REDIRECT_URI
+        value: https://reserva-reconciler-backend.onrender.com/auth/classy/callback
+      - key: QB_CLIENT_ID
+        sync: false
+      - key: QB_CLIENT_SECRET
+        sync: false
+      - key: QB_REDIRECT_URI
+        value: https://reserva-reconciler-backend.onrender.com/auth/quickbooks/callback
+      - key: QB_ENVIRONMENT
+        value: sandbox

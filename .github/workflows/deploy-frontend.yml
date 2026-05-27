@@ -46,7 +46,9 @@ jobs:
           # Set this repo variable (Settings → Variables → Actions) to the
           # public URL of your backend, e.g. https://xxxx.ngrok-free.app
           # Leave empty to build a static shell (API calls will fail until set).
-          VITE_API_BASE_URL: https://fd4f7830ff2962e8-205-234-80-20.serveousercontent.com
+          # Backend hosted on Render free tier — auto-deploys from this repo via render.yaml
+          # Render free tier sleeps after 15min idle; first request after sleep takes ~30s to wake
+          VITE_API_BASE_URL: https://reserva-reconciler-backend.onrender.com
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

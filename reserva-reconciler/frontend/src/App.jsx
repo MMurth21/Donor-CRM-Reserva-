@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import DonorCRM from './DonorCRM'
 import MappingPanel from './MappingPanel'
 import TransactionTable from './TransactionTable'
-import { NO_BACKEND } from './api'
+import { NO_BACKEND, waitForBackend } from './api'
 
 const TABS = [
   { id: 'donors',       label: 'Donors' },
@@ -103,8 +103,61 @@ function NoBackendScreen() {
   )
 }
 
+function WakingUpScreen({ seconds }) {
+  return (
+    <div style={{
+      minHeight: '60vh',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 18,
+      padding: '40px 16px',
+      textAlign: 'center',
+    }}>
+      <div style={{ fontSize: 30 }}>🌿</div>
+      <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text)' }}>
+        Waking up the backend…
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--muted)', maxWidth: 380 }}>
+        The Render free-tier backend sleeps after 15 minutes of inactivity.
+        First load takes ~30 seconds. Elapsed: {seconds}s.
+      </div>
+      <div style={{
+        width: 200, height: 3, background: 'var(--border)', borderRadius: 2, overflow: 'hidden',
+      }}>
+        <div style={{
+          width: `${Math.min(100, (seconds / 45) * 100)}%`,
+          height: '100%',
+          background: 'var(--platform)',
+          transition: 'width 0.5s linear',
+        }} />
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const [tab, setTab] = useState('donors')
+  // 'waking' | 'ready' | 'failed' (or 'waking' permanently if NO_BACKEND, since
+  // the NO_BACKEND branch renders before this state matters)
+  const [backendStatus, setBackendStatus] = useState('waking')
+  const [wakeSeconds, setWakeSeconds] = useState(0)
+
+  useEffect(() => {
+    if (NO_BACKEND) return
+    let cancelled = false
+    waitForBackend({
+      maxAttempts: 30,
+      intervalMs: 2000,
+      onTick: (_attempt, elapsedMs) => {
+        if (!cancelled) setWakeSeconds(Math.round(elapsedMs / 1000))
+      },
+    }).then(ok => {
+      if (!cancelled) setBackendStatus(ok ? 'ready' : 'failed')
+    })
+    return () => { cancelled = true }
+  }, [])
 
   return (
     <div>
@@ -133,7 +186,7 @@ export default function App() {
           </span>
         </div>
 
-        {!NO_BACKEND && (
+        {!NO_BACKEND && backendStatus === 'ready' && (
           <nav style={{ display: 'flex', gap: 2, marginLeft: 12 }}>
             {TABS.map(t => (
               <button
@@ -163,6 +216,10 @@ export default function App() {
 
       <div style={{ padding: '16px 0' }}>
         {NO_BACKEND ? (
+          <NoBackendScreen />
+        ) : backendStatus === 'waking' ? (
+          <WakingUpScreen seconds={wakeSeconds} />
+        ) : backendStatus === 'failed' ? (
           <NoBackendScreen />
         ) : (
           <>
