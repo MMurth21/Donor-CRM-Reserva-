@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import { api, apiUrl } from './api'
 
 const fmt$ = v =>
   v == null ? '—' : '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -218,7 +219,7 @@ export default function TransactionTable() {
   const [showReport, setShowReport]       = useState(false)
 
   useEffect(() => {
-    fetch('/classy/transactions/all')
+    api('/classy/transactions/all')
       .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json() })
       .then(d => { setData(d); setLoading(false) })
       .catch(e => { setError(e.message); setLoading(false) })
@@ -237,7 +238,7 @@ export default function TransactionTable() {
     setExportReport(null)
     setShowReport(true)
     try {
-      const res = await fetch('/export/sales-receipts/report')
+      const res = await api('/export/sales-receipts/report')
       if (!res.ok) throw new Error(res.statusText)
       const report = await res.json()
       setExportReport(report)
@@ -325,7 +326,7 @@ export default function TransactionTable() {
 
           {exportReport && !exportLoading && (
             <a
-              href="/export/sales-receipts/download"
+              href={apiUrl('/export/sales-receipts/download')}
               style={{
                 padding: '4px 12px',
                 fontSize: 12,

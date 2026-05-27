@@ -8,11 +8,19 @@ logger = logging.getLogger(__name__)
 MAPPING_FILE = Path(__file__).parent.parent / "data" / "campaign_mapping.json"
 
 _PROCESSOR_MAP = {
-    "stripe":      "Stripe",
-    "stripe_ach":  "Stripe",
-    "paypal":      "PayPal",
-    "paypal_ec":   "PayPal",
-    "paypal_rest": "PayPal",
+    # Stripe rails
+    "stripe":            "Stripe",
+    "stripe_ach":        "Stripe",
+    # PayPal rails — GoFundMe Pro routes both classic PayPal and
+    # the newer PayPal Commerce integration through the same PayPal payout.
+    "paypal":            "PayPal",
+    "paypal_ec":         "PayPal",
+    "paypal_rest":       "PayPal",
+    "paypalcommerce":    "PayPal",   # GoFundMe Pro / Classy Pay PayPal Commerce
+    # Legacy Classy Pay — pre-GoFundMe-Pro processing; NOT a direct bank payout;
+    # correctly excluded from the clearing-account JE (Callie confirmed 2026-05-27).
+    "classy pay":        "",
+    "classypay":         "",
 }
 
 
@@ -83,6 +91,15 @@ def normalize_transactions(raw_list: list) -> list:
             "transaction_date": tx.get("purchased_at") or "",
             "donor_name":       tx.get("member_name") or "",
             "donor_email":      tx.get("member_email_address") or "",
+            # donor-centric CRM fields
+            "donor_supporter_id":        str(tx.get("member_supporter_id") or tx.get("supporter_id") or ""),
+            "is_anonymous":              bool(tx.get("is_anonymous", False)),
+            "is_redacted":               bool(tx.get("is_redacted", False)),
+            "donation_amount_is_hidden": bool(tx.get("donation_amount_is_hidden", False)),
+            "recurring_donation_plan_id": str(tx.get("recurring_donation_plan_id") or ""),
+            "donor_phone":               tx.get("member_phone") or "",
+            "company_name":              tx.get("company_name") or "",
+            "donor_comment":             tx.get("comment") or "",
             "campaign_id":      campaign_id,
             "campaign_name":    get_campaign_name(campaign_id),
             "designation_id":   str(tx.get("designation_id", "") or ""),

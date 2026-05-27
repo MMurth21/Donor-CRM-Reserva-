@@ -17,6 +17,17 @@ Descriptions:
 
 JournalDate = last calendar day of the month (MM/DD/YYYY).
 
+Callie's invariants enforced here:
+  1. PayPalCommerce is handled in normalize.py (_PROCESSOR_MAP). This exporter
+     only sees resolved processor names ("Stripe", "PayPal").
+  2. CLEARING ZERO-OUT: sum(clearing debits) must equal sum(net_amount for all
+     included transactions). Fails loudly if there's a gap > $0.01.
+  3. UNKNOWN PROCESSOR = HARD ERROR: any mapped, non-$0, non-offline,
+     non-null-gateway transaction whose processor is not in KNOWN_PROCESSORS
+     raises ValueError. Do not emit a JE with a dropped payout processor.
+  4. MONTH WITHHOLD: if any campaign has a needs_mapping transaction in the
+     target month, the entire JE is withheld (raises ValueError listing blockers).
+
 Import via: QBO → Import Data → Journal Entries. DO NOT import without reviewing report first.
 """
 
@@ -73,6 +84,12 @@ def generate_journal_entry_csv(transactions: list, target_month: str) -> tuple[b
 
     target_month: "YYYY-MM" (e.g. "2026-05")
 
+    Raises ValueError for hard errors:
+      - Invalid target_month format
+      - Any unmapped campaigns in the target month (Rule 4 — month withheld)
+      - Any GoFundMe Pro transaction with an unknown processor (Rule 3 — hard error)
+      - Clearing zero-out validation failure > $0.01 (Rule 2)
+
     report keys:
       journal_no          – "JE-YYYYMM"
       je_date             – last day of month (MM/DD/YYYY)
@@ -85,10 +102,11 @@ def generate_journal_entry_csv(transactions: list, target_month: str) -> tuple[b
       cent_adjustment     – float or None
       processor_nets      – {processor: net_sum}
       total_fees          – {service_fee: float, processing_fee: float}
+      clearing_validation – {net_sum: float, clearing_sum: float, gap: float, ok: bool}
       excluded            – {
-            offline:        {count, total_gross, items: [{id, date, gross}]}
-            zero_dollar:    count
-            legacy_unknown: [{transaction_id, processor, gross_amount}]
+            offline:      {count, total_gross, items: [{id, date, gross}]}
+            zero_dollar:  count
+            null_gateway: count   # null/empty gateway — not a GoFundMe Pro payout
           }
       unknown_classes     – [str]
       line_count          – CSV data rows written (excl. header)
@@ -105,39 +123,109 @@ def generate_journal_entry_csv(transactions: list, target_month: str) -> tuple[b
     journal_no = f"JE-{target_year}{target_month_num:02d}"
     je_date    = _last_day(target_year, target_month_num)
 
-    # Collect all mapped transactions in target month (any gross)
-    month_mapped: list[dict] = []
+    # ── RULE 4: MONTH WITHHELD if any campaign in this month is unmapped ─────
+    # Check ALL transactions in the target month (not just mapped ones).
+    all_month_txns: list[dict] = []
     for t in transactions:
-        if t.get("mapping_status") != "mapped":
-            continue
         raw_date = (t.get("transaction_date") or "")[:10]
         try:
             d = date.fromisoformat(raw_date)
         except (ValueError, TypeError):
-            logger.warning("Unparseable date for txn %s: %r", t.get("transaction_id"), raw_date)
             continue
         if d.year == target_year and d.month == target_month_num:
-            month_mapped.append(t)
+            all_month_txns.append(t)
 
-    # Bucket every transaction exactly once
-    zero_dollar:    list[dict] = []   # gross <= 0 — silently excluded
-    offline:        list[dict] = []   # offline gift, no processor — excluded intentionally
-    known_txns:     list[dict] = []   # Stripe / PayPal — goes into the JE
-    legacy_unknown: list[dict] = []   # non-empty gateway not in _PROCESSOR_MAP — flag loudly
+    blocking_campaigns: dict[str, dict] = {}
+    for t in all_month_txns:
+        if t.get("mapping_status") == "needs_mapping":
+            cid   = t.get("campaign_id") or "unknown"
+            cname = t.get("campaign_name") or cid
+            if cid not in blocking_campaigns:
+                blocking_campaigns[cid] = {
+                    "campaign_id":   cid,
+                    "campaign_name": cname,
+                    "txn_count":     0,
+                    "gross":         0.0,
+                }
+            blocking_campaigns[cid]["txn_count"] += 1
+            blocking_campaigns[cid]["gross"] = round(
+                blocking_campaigns[cid]["gross"] + _flt(t.get("gross_amount")), 2
+            )
+
+    if blocking_campaigns:
+        camps_sorted = sorted(blocking_campaigns.values(), key=lambda x: -x["gross"])
+        lines = "\n".join(
+            f"  [{c['campaign_id']}] {c['campaign_name']!r}: "
+            f"{c['txn_count']} txn(s), ${c['gross']:.2f} gross"
+            for c in camps_sorted
+        )
+        raise ValueError(
+            f"JE {journal_no}: WITHHELD — {len(blocking_campaigns)} unmapped campaign(s) "
+            f"in {mon_label}. Map them all before generating the JE.\n"
+            f"Blocking campaigns:\n{lines}"
+        )
+
+    # ── Collect mapped transactions for the target month ─────────────────────
+    month_mapped: list[dict] = [
+        t for t in all_month_txns
+        if t.get("mapping_status") == "mapped"
+    ]
+
+    # ── Bucket every mapped transaction exactly once ──────────────────────────
+    #
+    # Exclusion tiers (in priority order):
+    #   zero_dollar   – gross <= 0 ($0 registrations, voids)
+    #   offline       – null/empty gateway + method=="offline"  (booked separately)
+    #   null_gateway  – null/empty gateway, non-offline (legacy Classy Pay, no payout)
+    #   known_txns    – processor in KNOWN_PROCESSORS → goes in JE
+    #   HARD ERROR    – non-empty processor NOT in KNOWN_PROCESSORS
+    #
+    zero_dollar:    list[dict] = []
+    offline:        list[dict] = []
+    null_gateway:   list[dict] = []   # no processor → not a GoFundMe Pro payout
+    known_txns:     list[dict] = []
+    unknown_proc:   list[dict] = []   # → RULE 3: hard error
 
     for t in month_mapped:
         gross  = _flt(t.get("gross_amount"))
-        proc   = t.get("processor", "")              # "" when payment_gateway was null/empty
+        proc   = t.get("processor", "")          # "" when payment_gateway was null/empty
         method = (t.get("payment_method") or "").lower().strip()
 
         if gross <= 0:
             zero_dollar.append(t)
         elif not proc and method == "offline":
             offline.append(t)
+        elif not proc:
+            null_gateway.append(t)              # no payout, correctly excluded
         elif proc in KNOWN_PROCESSORS:
             known_txns.append(t)
         else:
-            legacy_unknown.append(t)
+            unknown_proc.append(t)              # HARD ERROR: unknown processor
+
+    # ── RULE 3: Unknown processor = HARD ERROR ───────────────────────────────
+    if unknown_proc:
+        by_proc: dict[str, list] = defaultdict(list)
+        for t in unknown_proc:
+            by_proc[t.get("processor", "(empty)")].append(t)
+
+        detail_lines = []
+        for proc_name, txns in sorted(by_proc.items()):
+            total = round(sum(_flt(t.get("gross_amount")) for t in txns), 2)
+            detail_lines.append(
+                f"  processor={proc_name!r}: {len(txns)} txn(s), "
+                f"${total:.2f} gross, "
+                f"ids=[{', '.join(str(t.get('transaction_id','?')) for t in txns[:5])}]"
+                + (" …" if len(txns) > 5 else "")
+            )
+
+        raise ValueError(
+            f"JE {journal_no}: HARD ERROR — {len(unknown_proc)} transaction(s) in "
+            f"{mon_label} have a non-empty payment processor that is NOT in the processor "
+            f"map. A dropped payout would leave the clearing account non-zero. "
+            f"Add the missing processor to _PROCESSOR_MAP in connectors/normalize.py "
+            f"and regenerate the cache before exporting.\n"
+            + "\n".join(detail_lines)
+        )
 
     offline_gross = round(sum(_flt(t.get("gross_amount")) for t in offline), 2)
     je_gross      = round(sum(_flt(t.get("gross_amount")) for t in known_txns), 2)
@@ -151,11 +239,12 @@ def generate_journal_entry_csv(transactions: list, target_month: str) -> tuple[b
             "balanced": True, "total_debits": 0.0, "total_credits": 0.0,
             "delta": 0.0, "cent_adjustment": None, "processor_nets": {},
             "total_fees": {"service_fee": 0.0, "processing_fee": 0.0},
+            "clearing_validation": {"net_sum": 0.0, "clearing_sum": 0.0, "gap": 0.0, "ok": True},
             "excluded": {
-                "offline":        {"count": len(offline), "total_gross": offline_gross,
-                                   "items": [_offline_item(t) for t in offline]},
-                "zero_dollar":    len(zero_dollar),
-                "legacy_unknown": [_unknown_item(t) for t in legacy_unknown],
+                "offline":      {"count": len(offline), "total_gross": offline_gross,
+                                 "items": [_offline_item(t) for t in offline]},
+                "zero_dollar":  len(zero_dollar),
+                "null_gateway": len(null_gateway),
             },
             "unknown_classes": [], "line_count": 0,
             "warning": f"No Stripe/PayPal mapped transactions found for {target_month}",
@@ -168,6 +257,30 @@ def generate_journal_entry_csv(transactions: list, target_month: str) -> tuple[b
     for t in known_txns:
         p = t["processor"]
         clearing[p] = round(clearing[p] + _flt(t.get("net_amount")), 2)
+
+    # ── RULE 2: Clearing zero-out invariant ──────────────────────────────────
+    # sum(clearing debits) MUST equal sum(net_amount of all included transactions).
+    # Floating-point rounding at intermediate steps can create tiny differences;
+    # a gap > $0.01 indicates a real accounting error.
+    net_sum      = round(sum(_flt(t.get("net_amount")) for t in known_txns), 2)
+    clearing_sum = round(sum(clearing.values()), 2)
+    clearing_gap = round(clearing_sum - net_sum, 2)
+    clearing_ok  = abs(clearing_gap) <= 0.01
+
+    if not clearing_ok:
+        raise ValueError(
+            f"JE {journal_no}: CLEARING ZERO-OUT FAILED — "
+            f"clearing debits ${clearing_sum:.2f} ≠ sum of transaction nets ${net_sum:.2f} "
+            f"(gap ${clearing_gap:+.2f}). This JE would leave the clearing account "
+            f"non-zero. Do not import. Investigate the gap before retrying."
+        )
+
+    clearing_validation = {
+        "net_sum":      net_sum,
+        "clearing_sum": clearing_sum,
+        "gap":          clearing_gap,
+        "ok":           clearing_ok,
+    }
 
     # 2. Fee lines — per (processor, campaign_id, designation_id)
     svc_lines:  dict[tuple, float] = defaultdict(float)
@@ -280,17 +393,19 @@ def generate_journal_entry_csv(transactions: list, target_month: str) -> tuple[b
             "service_fee":    total_svc_fee,
             "processing_fee": total_proc_fee,
         },
+        "clearing_validation": clearing_validation,
         "excluded": {
-            "offline":        {"count": len(offline), "total_gross": offline_gross,
-                               "items": [_offline_item(t) for t in offline]},
-            "zero_dollar":    len(zero_dollar),
-            "legacy_unknown": [_unknown_item(t) for t in legacy_unknown],
+            "offline":      {"count": len(offline), "total_gross": offline_gross,
+                             "items": [_offline_item(t) for t in offline]},
+            "zero_dollar":  len(zero_dollar),
+            "null_gateway": len(null_gateway),
         },
         "unknown_classes":    sorted(unknown_classes),
         "line_count":         line_count,
     }
 
-    _print_validation(report, clearing, total_clearing, total_svc_fee, total_proc_fee)
+    _print_validation(report, clearing, total_clearing, total_svc_fee, total_proc_fee,
+                      clearing_validation)
     return b"\xef\xbb\xbf" + buf.getvalue().encode("utf-8"), report
 
 
@@ -303,22 +418,16 @@ def _offline_item(t: dict) -> dict:
     }
 
 
-def _unknown_item(t: dict) -> dict:
-    return {
-        "transaction_id": t.get("transaction_id"),
-        "processor":      t.get("processor"),
-        "gross_amount":   _flt(t.get("gross_amount")),
-    }
-
-
 def _print_validation(report: dict, clearing: dict, total_clearing: float,
-                      total_svc_fee: float, total_proc_fee: float):
-    sep = "=" * 62
+                      total_svc_fee: float, total_proc_fee: float,
+                      clearing_validation: dict):
+    sep = "=" * 66
     excl      = report["excluded"]
     n_offline = excl["offline"]["count"]
     g_offline = excl["offline"]["total_gross"]
     n_zero    = excl["zero_dollar"]
-    n_unknown = len(excl["legacy_unknown"])
+    n_null    = excl["null_gateway"]
+    cv        = clearing_validation
 
     print(f"\n{sep}")
     print(f"JE VALIDATION — {report['journal_no']}  ({_mon_label_from_no(report['journal_no'])})")
@@ -328,7 +437,7 @@ def _print_validation(report: dict, clearing: dict, total_clearing: float,
           f"(${report['je_gross']:.2f}).")
     print(f"  Excluded: {n_offline} offline (${g_offline:.2f}, booked separately), "
           f"{n_zero} zero-dollar, "
-          f"{n_unknown} unknown {'(investigate if >0)' if n_unknown == 0 else '— INVESTIGATE'}.")
+          f"{n_null} null-gateway (legacy/no-payout).")
 
     if n_offline:
         print(f"\n  Offline donations excluded (handled separately by bookkeeper):")
@@ -336,16 +445,18 @@ def _print_validation(report: dict, clearing: dict, total_clearing: float,
             print(f"    txn {item['transaction_id']}  {item['date']}  "
                   f"${item['gross_amount']:.2f}  method={item['payment_method']!r}")
 
-    if n_unknown:
-        print(f"\n  *** LEGACY/UNKNOWN PROCESSORS — INVESTIGATE ({n_unknown}) ***")
-        for u in excl["legacy_unknown"]:
-            print(f"    txn {u['transaction_id']}  gateway={u['processor']!r}  "
-                  f"gross=${u['gross_amount']:.2f}")
-
     if report["transactions_count"]:
         print(f"\n  Per-processor NET subtotals:")
         for proc in sorted(clearing):
             print(f"    {proc:<8}  ${clearing[proc]:.2f}")
+
+        # Rule 2: Clearing zero-out result
+        cv_ok = "✓ PASS" if cv["ok"] else "✗ FAIL"
+        print(f"\n  Clearing zero-out check ({cv_ok}):")
+        print(f"    sum(clearing debits) = ${cv['clearing_sum']:.2f}")
+        print(f"    sum(txn net_amounts) = ${cv['net_sum']:.2f}")
+        if cv["gap"] != 0.0:
+            print(f"    gap                 = ${cv['gap']:+.4f}")
 
         print(f"\n  Total gross   = ${report['total_credits']:.2f}")
         print(f"  Total debits  = ${report['total_debits']:.2f}")
@@ -353,7 +464,7 @@ def _print_validation(report: dict, clearing: dict, total_clearing: float,
         print(f"    Service fee = ${total_svc_fee:.2f}")
         print(f"    Proc fee    = ${total_proc_fee:.2f}")
 
-        bal_str = "BALANCED" if report["balanced"] else f"IMBALANCED  delta=${report['delta']:.4f}"
+        bal_str = "BALANCED ✓" if report["balanced"] else f"IMBALANCED ✗  delta=${report['delta']:.4f}"
         print(f"\n  Balance check : {bal_str}")
         if report["cent_adjustment"] is not None:
             print(f"  Cent adj applied: ${report['cent_adjustment']:.4f} on largest credit line")
@@ -368,7 +479,7 @@ def _print_validation(report: dict, clearing: dict, total_clearing: float,
 
 def _print_validation_empty(journal_no: str, mon_label: str, report: dict):
     excl = report["excluded"]
-    sep  = "=" * 62
+    sep  = "=" * 66
     print(f"\n{sep}")
     print(f"JE VALIDATION — {journal_no}  ({mon_label})")
     print(sep)
@@ -376,7 +487,7 @@ def _print_validation_empty(journal_no: str, mon_label: str, report: dict):
     print(f"  Excluded: {excl['offline']['count']} offline "
           f"(${excl['offline']['total_gross']:.2f}, booked separately), "
           f"{excl['zero_dollar']} zero-dollar, "
-          f"{len(excl['legacy_unknown'])} unknown.")
+          f"{excl['null_gateway']} null-gateway.")
     print(f"  WARNING: {report['warning']}")
     print(sep + "\n")
 

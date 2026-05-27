@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { api } from './api'
 
 const NEW_SENTINEL = '__new__'
 
@@ -63,7 +64,7 @@ export default function CampaignRow({ campaign, options, isLast, onSaved }) {
     setSaving(true)
     setErr(null)
     try {
-      const res = await fetch('/mapping/assign', {
+      const res = await api('/mapping/assign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,10 +1,11 @@
 import io
 import os
+import re
 import json
 import logging
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -26,13 +27,18 @@ from exporters.journal_entry_csv import generate_journal_entry_csv
 logger = logging.getLogger(__name__)
 
 MAPPING_FILE = Path(__file__).parent / "data" / "campaign_mapping.json"
+ANNOTATIONS_FILE = Path(__file__).parent / "data" / "donor_annotations.json"
 TRANSACTIONS_CACHE_FILE = Path(__file__).parent / "tokens" / "transactions_cache.json"
 CACHE_TTL = timedelta(hours=1)
+
+_SAFE_DONOR_ID = re.compile(r'^[a-zA-Z0-9_-]{1,80}$')
 
 app = FastAPI(title="Reserva Reconciler")
 
 app.add_middleware(
     CORSMiddleware,
+    # Local dev (any port) + GitHub Pages frontend
+    allow_origins=["https://mmurth21.github.io"],
     allow_origin_regex=r"http://localhost:\d+",
     allow_credentials=True,
     allow_methods=["*"],
@@ -265,7 +271,60 @@ def _cache_schema_valid(cached: dict) -> bool:
     if not txns:
         return True
     sample = txns[0]
-    return "processor" in sample and "designation_id" in sample and "payment_method" in sample
+    if not (
+        "processor" in sample
+        and "designation_id" in sample
+        and "payment_method" in sample
+        and "donor_supporter_id" in sample  # CRM fields added 2026-05-27
+        and "is_anonymous" in sample
+    ):
+        return False
+    # PayPalCommerce fix (2026-05-27): if any processor was cached as raw "paypalcommerce"
+    # (before the _PROCESSOR_MAP update), the cache must be rebuilt.
+    if any(t.get("processor", "").lower() == "paypalcommerce" for t in txns):
+        logger.info("Cache stale: found raw 'paypalcommerce' processor — forcing rebuild")
+        return False
+    return True
+
+
+# ── donor annotations ─────────────────────────────────────────────────────────
+
+def _read_annotations() -> dict:
+    if not ANNOTATIONS_FILE.exists():
+        return {}
+    return json.loads(ANNOTATIONS_FILE.read_text(encoding="utf-8"))
+
+
+def _write_annotations(data: dict):
+    ANNOTATIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = ANNOTATIONS_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, ANNOTATIONS_FILE)
+
+
+class AnnotationBody(BaseModel):
+    tags: List[str] = []
+    note: str = ""
+
+
+@app.get("/donors/annotations")
+def get_all_annotations():
+    """Return all donor annotations keyed by safe donor_id."""
+    return _read_annotations()
+
+
+@app.post("/donors/{donor_id}/annotations")
+def set_donor_annotations(donor_id: str, body: AnnotationBody):
+    """Save tags and note for one donor. donor_id must be a safe computed key (sid_*, em_*, unk)."""
+    if not _SAFE_DONOR_ID.match(donor_id):
+        raise HTTPException(status_code=400, detail="donor_id contains invalid characters")
+    # Sanitise tags: strip whitespace, deduplicate, max 20 chars each, max 20 tags
+    clean_tags = list(dict.fromkeys(t.strip()[:40] for t in body.tags if t.strip()))[:20]
+    clean_note = body.note.strip()[:4000]
+    data = _read_annotations()
+    data[donor_id] = {"tags": clean_tags, "note": clean_note}
+    _write_annotations(data)
+    return data[donor_id]
 
 
 def _get_all_transactions() -> list:

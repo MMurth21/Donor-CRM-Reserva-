@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import CampaignRow from './CampaignRow'
+import { api } from './api'
 
 export default function MappingPanel() {
   const [campaigns, setCampaigns] = useState(null)
@@ -8,8 +9,8 @@ export default function MappingPanel() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/mapping/unmapped').then(r => r.json()),
-      fetch('/mapping/options').then(r => r.json()),
+      api('/mapping/unmapped').then(r => r.json()),
+      api('/mapping/options').then(r => r.json()),
     ])
       .then(([unmapped, opts]) => {
         setCampaigns(unmapped.campaigns)
