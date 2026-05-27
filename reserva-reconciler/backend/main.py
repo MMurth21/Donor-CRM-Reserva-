@@ -37,9 +37,10 @@ app = FastAPI(title="Reserva Reconciler")
 
 app.add_middleware(
     CORSMiddleware,
-    # Local dev (any port) + GitHub Pages frontend
-    allow_origins=["https://mmurth21.github.io"],
-    allow_origin_regex=r"http://localhost:\d+",
+    # Starlette 0.49+: mixing allow_origins list + allow_origin_regex breaks
+    # matching — use regex-only to cover both GitHub Pages and local dev.
+    allow_origins=[],
+    allow_origin_regex=r"(https://mmurth21\.github\.io|http://localhost:\d+)",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
