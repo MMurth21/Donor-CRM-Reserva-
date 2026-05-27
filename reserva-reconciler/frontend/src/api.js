@@ -11,6 +11,14 @@
 export const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 
 /**
+ * True when the app is running as a static GitHub Pages build with no backend
+ * URL configured. Components can use this to show a "not connected" screen
+ * instead of a confusing 404 error.
+ */
+export const NO_BACKEND =
+  API_BASE === '' && !window.location.hostname.includes('localhost')
+
+/**
  * fetch() wrapper that prepends API_BASE.
  * Usage: api('/classy/transactions/all').then(r => r.json())
  */

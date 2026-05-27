@@ -23,7 +23,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-#root { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+#root { max-width: 1440px; margin: 0 auto; padding: 24px 16px; }
 
 button { cursor: pointer; font-size: 12px; font-family: inherit; }
 select, input { font-size: 12px; font-family: inherit; }
