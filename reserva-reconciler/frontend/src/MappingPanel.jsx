@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import CampaignRow from './CampaignRow'
 import { api } from './api'
+import BackendError from './BackendError'
 
 export default function MappingPanel() {
   const [campaigns, setCampaigns] = useState(null)
@@ -16,18 +17,21 @@ export default function MappingPanel() {
         setCampaigns(unmapped.campaigns)
         setOptions(opts)
       })
-      .catch(e => setError(e.message))
+      .catch(e => setError(e instanceof TypeError ? '__network__' : e.message))
   }, [])
 
   function handleSaved(campaign_id) {
     setCampaigns(prev => prev.filter(c => c.campaign_id !== campaign_id))
   }
 
-  if (error) return (
-    <div style={{ color: 'var(--danger)', padding: 12, fontSize: 12 }}>
-      Error loading mapping data: {error}
-    </div>
-  )
+  if (error) {
+    if (error === '__network__') return <BackendError context="campaign mapping" />
+    return (
+      <div style={{ color: 'var(--danger)', padding: 12, fontSize: 12 }}>
+        Error loading mapping data: {error}
+      </div>
+    )
+  }
 
   if (!campaigns) return (
     <div style={{ color: 'var(--muted)', padding: 12, fontSize: 12 }}>

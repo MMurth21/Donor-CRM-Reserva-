@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { api } from './api'
+import BackendError from './BackendError'
 
 // ── formatting ────────────────────────────────────────────────────────────────
 
@@ -622,7 +623,10 @@ export default function DonorCRM() {
     api('/classy/transactions/all')
       .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json() })
       .then(d => { setData(d); setLoading(false) })
-      .catch(e => { setError(e.message); setLoading(false) })
+      .catch(e => {
+        setError(e instanceof TypeError ? '__network__' : e.message)
+        setLoading(false)
+      })
   }, [])
 
   useEffect(() => {
@@ -749,6 +753,7 @@ export default function DonorCRM() {
   }
 
   if (error) {
+    if (error === '__network__') return <BackendError context="donor transactions" />
     return (
       <div style={{ color: 'var(--danger)', padding: '12px 0', fontSize: 12 }}>
         Error loading transactions: {error}

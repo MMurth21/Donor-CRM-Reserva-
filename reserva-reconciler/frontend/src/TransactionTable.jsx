@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { api, apiUrl } from './api'
+import BackendError from './BackendError'
 
 const fmt$ = v =>
   v == null ? '—' : '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -222,7 +223,7 @@ export default function TransactionTable() {
     api('/classy/transactions/all')
       .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json() })
       .then(d => { setData(d); setLoading(false) })
-      .catch(e => { setError(e.message); setLoading(false) })
+      .catch(e => { setError(e instanceof TypeError ? '__network__' : e.message); setLoading(false) })
   }, [])
 
   function handleSort(key) {
@@ -282,11 +283,14 @@ export default function TransactionTable() {
     net:            round2(filtered.reduce((s, r) => s + r.net_amount,       0)),
   }), [filtered])
 
-  if (error) return (
-    <div style={{ color: 'var(--danger)', padding: 12, fontSize: 12 }}>
-      Error loading transactions: {error}
-    </div>
-  )
+  if (error) {
+    if (error === '__network__') return <BackendError context="transactions" />
+    return (
+      <div style={{ color: 'var(--danger)', padding: 12, fontSize: 12 }}>
+        Error loading transactions: {error}
+      </div>
+    )
+  }
 
   if (loading) return (
     <div style={{ color: 'var(--muted)', padding: 12, fontSize: 12 }}>
