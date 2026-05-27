@@ -1,0 +1,65 @@
+name: Deploy Frontend to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'reserva-reconciler/frontend/**'
+      - '.github/workflows/deploy-frontend.yml'
+  # Allow manual re-deploy (e.g. after changing VITE_API_BASE_URL variable)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deploy at a time; new pushes cancel in-flight deploys.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: reserva-reconciler/frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: reserva-reconciler/frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: reserva-reconciler/frontend
+        run: npm run build
+        env:
+          # GitHub Pages sub-path — must match the repo name exactly.
+          VITE_BASE: /Donor-CRM-Reserva-/
+          # Set this repo variable (Settings → Variables → Actions) to the
+          # public URL of your backend, e.g. https://xxxx.ngrok-free.app
+          # Leave empty to build a static shell (API calls will fail until set).
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: reserva-reconciler/frontend/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
