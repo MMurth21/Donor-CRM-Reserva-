@@ -46,7 +46,7 @@ jobs:
           # Set this repo variable (Settings → Variables → Actions) to the
           # public URL of your backend, e.g. https://xxxx.ngrok-free.app
           # Leave empty to build a static shell (API calls will fail until set).
-          VITE_API_BASE_URL: https://757b33289065c9.lhr.life
+          VITE_API_BASE_URL: https://fd4f7830ff2962e8-205-234-80-20.serveousercontent.com
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
